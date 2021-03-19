@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import './uniswapv2/libraries/UniswapV2Library.sol';
 import "./ZooToken.sol";
 import "./ZooRouter.sol";
+import "./HalfAttenuationZooReward.sol";
 
 
 interface IZooKeeper {
@@ -22,7 +23,7 @@ interface IZooKeeper {
 // ZooSwapMining is interesting place where you can get more ZOO as long as you stake
 // Have fun reading it. Hopefully it's bug-free. God bless.
 
-contract ZooSwapMining is Ownable {
+contract ZooSwapMining is Ownable ,HalfAttenuationZooReward{
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
     // Info of each user.
@@ -58,19 +59,14 @@ contract ZooSwapMining is Ownable {
     address public factoryAddr;
     // The ZOO Keeper
     IZooKeeper public zookeeper;
-    // ZOO tokens created per block.
-    uint256 public zooPerBlock;
+  
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
     // Total allocation poitns. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
-    // The block number when ZOO mining starts
-    uint256 public startBlock;
-    // The block number of half cycle
-    uint256 public  blockNumberOfHalfCycle;
-    
+
     //Pos start from 1, pos-1 equals pool index 
     mapping(address => uint256) public tokenPairMapPoolPos;
 
@@ -91,15 +87,11 @@ contract ZooSwapMining is Ownable {
         address payable _routerAddr,
         uint256 _zooPerBlock,
         uint256 _startBlock,
-        uint256 _blockNumberOfHalfCycle
-    ) public {
+        uint256 _blockNumberOfHalfAttenuationCycle
+    ) public HalfAttenuationZooReward(_zooPerBlock,_startBlock,_blockNumberOfHalfAttenuationCycle) {
         zoo = _zoo;
         zookeeper = _zookeeper;
         routerAddr = _routerAddr;
-        zooPerBlock = _zooPerBlock;
-        startBlock = _startBlock;
-        blockNumberOfHalfCycle = _blockNumberOfHalfCycle;
-
         factoryAddr = ZooRouter(_routerAddr).factory();
     }
 
@@ -151,34 +143,6 @@ contract ZooSwapMining is Ownable {
         poolInfo[_pid].allocPoint = _allocPoint;
     }
 
-    // Return reward multiplier over the given _from to _to block.
-    function getMultiplier(uint256 _from, uint256 _to)
-        public
-        view
-        returns (uint256)
-    {
-        uint256 _halfCycle = blockNumberOfHalfCycle;
-        uint256 current ;
-        uint256 divider = 1;
-        uint256 total = 0;
-        for (current = startBlock ; current < _to ; current+=_halfCycle) {
-            uint256 nextPos = current+_halfCycle;
-
-            if (nextPos > _from) {
-                total += nextPos.sub(_from).div(divider);
-            }
-
-            if(nextPos > _to) { //last range
-                total += _to.sub(current).div(divider);
-            }
-
-            divider = divider.mul(2);
-        }
-        return total;
-
-    }
-
-
 
     // View function to see pending ZOOs on frontend.
     function pendingZooAll(address _user)
@@ -194,10 +158,8 @@ contract ZooSwapMining is Ownable {
             uint256 accZooPerShare = pool.accZooPerShare;
             uint256 lpSupply = pool.lpTokenTotal;
             if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-                uint256 multiplier =
-                    getMultiplier(pool.lastRewardBlock, block.number);
                 uint256 zooReward =
-                    multiplier.mul(zooPerBlock).mul(pool.allocPoint).div(
+                     getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
                         totalAllocPoint
                     );
                 accZooPerShare = accZooPerShare.add(
@@ -222,10 +184,8 @@ contract ZooSwapMining is Ownable {
         uint256 accZooPerShare = pool.accZooPerShare;
         uint256 lpSupply = pool.lpTokenTotal;
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-            uint256 multiplier =
-                getMultiplier(pool.lastRewardBlock, block.number);
             uint256 zooReward =
-                multiplier.mul(zooPerBlock).mul(pool.allocPoint).div(
+                getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
                     totalAllocPoint
                 );
             accZooPerShare = accZooPerShare.add(
@@ -254,11 +214,9 @@ contract ZooSwapMining is Ownable {
             pool.lastRewardBlock = block.number;
             return;
         }
-        uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
         uint256 zooReward =
-            multiplier.mul(zooPerBlock).mul(pool.allocPoint).div(
-                totalAllocPoint
-            );
+            getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
+            totalAllocPoint);
 
         zooReward = zookeeper.requestForZOO(zooReward);
 

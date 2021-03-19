@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ZooToken.sol";
+import "./HalfAttenuationZooReward.sol";
 
 
 
@@ -22,7 +23,7 @@ interface IZooKeeper {
 // ZooPark is interesting place where you can get more ZOO as long as you stake
 // Have fun reading it. Hopefully it's bug-free. God bless.
 
-contract ZooPark is Ownable {
+contract ZooPark is Ownable ,HalfAttenuationZooReward{
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
     // Info of each user.
@@ -52,20 +53,12 @@ contract ZooPark is Ownable {
     ZooToken public zoo;
     // The ZOO Keeper
     IZooKeeper public zookeeper;
-    // Block number when bonus ZOO period ends.
-    uint256 public bonusEndBlock;
-    // ZOO tokens created per block.
-    uint256 public zooPerBlock;
-    // Bonus muliplier for early zoo makers.
-    uint256 public constant BONUS_MULTIPLIER = 10;
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
     // Total allocation poitns. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
-    // The block number when ZOO mining starts.
-    uint256 public startBlock;
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
     event EmergencyWithdraw(
@@ -79,13 +72,11 @@ contract ZooPark is Ownable {
         IZooKeeper _zookeeper,
         uint256 _zooPerBlock,
         uint256 _startBlock,
-        uint256 _bonusEndBlock
-    ) public {
+        uint256 _blockNumberOfHalfAttenuationCycle
+    ) public HalfAttenuationZooReward(_zooPerBlock,_startBlock,_blockNumberOfHalfAttenuationCycle){
         zoo = _zoo;
         zookeeper = _zookeeper;
         zooPerBlock = _zooPerBlock;
-        bonusEndBlock = _bonusEndBlock;
-        startBlock = _startBlock;
     }
 
     function poolLength() external view returns (uint256) {
@@ -130,23 +121,6 @@ contract ZooPark is Ownable {
         poolInfo[_pid].allocPoint = _allocPoint;
     }
 
-    // Return reward multiplier over the given _from to _to block.
-    function getMultiplier(uint256 _from, uint256 _to)
-        public
-        view
-        returns (uint256)
-    {
-        if (_to <= bonusEndBlock) {
-            return _to.sub(_from).mul(BONUS_MULTIPLIER);
-        } else if (_from >= bonusEndBlock) {
-            return _to.sub(_from);
-        } else {
-            return
-                bonusEndBlock.sub(_from).mul(BONUS_MULTIPLIER).add(
-                    _to.sub(bonusEndBlock)
-                );
-        }
-    }
 
     // View function to see pending ZOOs on frontend.
     function pendingZoo(uint256 _pid, address _user)
@@ -159,10 +133,8 @@ contract ZooPark is Ownable {
         uint256 accZooPerShare = pool.accZooPerShare;
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-            uint256 multiplier =
-                getMultiplier(pool.lastRewardBlock, block.number);
             uint256 zooReward =
-                multiplier.mul(zooPerBlock).mul(pool.allocPoint).div(
+                getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
                     totalAllocPoint
                 );
             accZooPerShare = accZooPerShare.add(
@@ -191,9 +163,7 @@ contract ZooPark is Ownable {
             pool.lastRewardBlock = block.number;
             return;
         }
-        uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-        uint256 zooReward =
-            multiplier.mul(zooPerBlock).mul(pool.allocPoint).div(
+        uint256 zooReward = getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
                 totalAllocPoint
             );
 
