@@ -46,6 +46,11 @@ contract ZooKeeper is Ownable {
         address _investorAddr,
         address _foundationAddr
     ) public {
+        require(_devAddr != address(0));
+        require(_investorAddr != address(0));
+        require(_foundationAddr != address(0)); 
+        require(address(_zoo) !=  address(0));
+
         zoo = _zoo;
         appPublished = false;
         devAddr = _devAddr;
@@ -72,6 +77,7 @@ contract ZooKeeper is Ownable {
  
 
     function requestForZOO(uint256 _amount) public  returns (uint256) {
+        // when reward is zero,this should not revert because the swap methods still depend on this
         if(_amount == 0){
             return 0;
         }
@@ -83,6 +89,7 @@ contract ZooKeeper is Ownable {
         require(newTransferd <=  unlocked, "transferd is over unlocked "); 
         require(newTransferd <= app.totalValue,"transferd is over total ");
 
+        // when 1 zoo is mint, extra 0.5 should be mint too (0.125 for inverstor,0.125 for foundtaion ,0.25 for dev) 
         //mint to dev,investor,foundation
         zoo.mint(devAddr,_amount.div(4));
         zoo.mint(investorAddr,_amount.div(8));

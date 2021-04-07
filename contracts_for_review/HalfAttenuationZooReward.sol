@@ -54,13 +54,13 @@ contract HalfAttenuationZooReward {
         returns (uint256)
     {
         uint256 cycle = _to.sub(_startBlock).div(_blockNumberOfHalfAttenuationCycle);
-        uint256 attenuationMul =  1 << cycle;
-        if(attenuationMul ==0 ){
-            attenuationMul =  1<<255;
+        if(cycle > 255){
+            cycle =  255;
         }
+        uint256 attenuationMul =  1 << cycle;
 
-        return _zooPerBlock.mul(_blockNumberOfHalfAttenuationCycle*2).sub(_zooPerBlock.mul(_blockNumberOfHalfAttenuationCycle).div(attenuationMul)).sub(    
-            _blockNumberOfHalfAttenuationCycle.sub( _to.sub(_startBlock) % _blockNumberOfHalfAttenuationCycle ).mul(_zooPerBlock).div(attenuationMul)
+        return _zooPerBlock.mul(_blockNumberOfHalfAttenuationCycle.mul(2)).sub(_zooPerBlock.mul(_blockNumberOfHalfAttenuationCycle).div(attenuationMul)).sub(    
+            _blockNumberOfHalfAttenuationCycle.sub( _to.sub(_startBlock).mod(_blockNumberOfHalfAttenuationCycle) ).mul(_zooPerBlock).div(attenuationMul)
           );
     }
 

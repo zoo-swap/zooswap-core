@@ -5,6 +5,7 @@
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import './uniswapv2/libraries/UniswapV2Library.sol';
@@ -23,7 +24,7 @@ interface IZooKeeper {
 // ZooSwapMining is interesting place where you can get more ZOO as long as you stake
 // Have fun reading it. Hopefully it's bug-free. God bless.
 
-contract ZooSwapMining is Ownable ,HalfAttenuationZooReward{
+contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
     // Info of each user.
@@ -89,6 +90,9 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward{
         uint256 _startBlock,
         uint256 _blockNumberOfHalfAttenuationCycle
     ) public HalfAttenuationZooReward(_zooPerBlock,_startBlock,_blockNumberOfHalfAttenuationCycle) {
+        require(address(_zoo) != address(0));
+        require(address(_zookeeper) != address(0));
+        require(_routerAddr != address(0));
         zoo = _zoo;
         zookeeper = _zookeeper;
         routerAddr = _routerAddr;
@@ -166,7 +170,7 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward{
                     zooReward.mul(1e12).div(lpSupply)
                 );
             }
-            total += user.amount.mul(accZooPerShare).div(1e12).sub(user.rewardDebt);
+            total = user.amount.mul(accZooPerShare).div(1e12).sub(user.rewardDebt).add(total);
         }
         return total;
     }
@@ -227,7 +231,7 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward{
         pool.lastRewardBlock = block.number;
     }
 
-    function withdrawAll() public {
+    function withdrawAll() public nonReentrant{
         uint256 length = poolInfo.length;
         for (uint256 pid = 0; pid < length; ++pid) {
             uint256 liqBalance = userInfo[pid][msg.sender].amount; 
@@ -235,8 +239,9 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward{
         }
     }
 
-    function withdraw(uint256 _pid,uint256 _burned) public {
-        _withdraw(_pid, _burned);
+    function withdraw(uint256 _pid) public nonReentrant{
+        uint256 liqBalance = userInfo[_pid][msg.sender].amount; 
+        _withdraw(_pid, liqBalance);
     }
 
     function swap(address account, address input, address output, uint256 inAmount  ,uint256 outAmount) onlyRouter external returns (bool){
@@ -258,7 +263,7 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward{
 
         pool.lpTokenTotal = pool.lpTokenTotal.add(_amount);
         user.amount = user.amount.add(_amount);
-        user.rewardDebt = user.rewardDebt.add(_amount.mul(pool.accZooPerShare)).div(1e12);
+        user.rewardDebt = user.rewardDebt.add(_amount.mul(pool.accZooPerShare).div(1e12));
 
         emit MinedBySwap(account, _pid, _amount);
         return true;

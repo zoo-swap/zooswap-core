@@ -5,6 +5,7 @@ pragma solidity 0.6.12;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ZooToken.sol";
@@ -23,7 +24,7 @@ interface IZooKeeper {
 // ZooPark is interesting place where you can get more ZOO as long as you stake
 // Have fun reading it. Hopefully it's bug-free. God bless.
 
-contract ZooPark is Ownable ,HalfAttenuationZooReward{
+contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
     // Info of each user.
@@ -74,6 +75,9 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward{
         uint256 _startBlock,
         uint256 _blockNumberOfHalfAttenuationCycle
     ) public HalfAttenuationZooReward(_zooPerBlock,_startBlock,_blockNumberOfHalfAttenuationCycle){
+        require(address(_zoo) != address(0));
+        require(address(_zookeeper) != address(0));
+
         zoo = _zoo;
         zookeeper = _zookeeper;
         zooPerBlock = _zooPerBlock;
@@ -176,7 +180,7 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward{
     }
 
     // Deposit LP tokens to ZooPark for Zoo allocation.
-    function deposit(uint256 _pid, uint256 _amount) public {
+    function deposit(uint256 _pid, uint256 _amount) public nonReentrant{
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
@@ -198,7 +202,7 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward{
     }
 
     // Withdraw LP tokens from MasterChef.
-    function withdraw(uint256 _pid, uint256 _amount) public {
+    function withdraw(uint256 _pid, uint256 _amount) public nonReentrant{
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
@@ -215,7 +219,7 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward{
     }
 
     // Withdraw without caring about rewards. EMERGENCY ONLY.
-    function emergencyWithdraw(uint256 _pid) public {
+    function emergencyWithdraw(uint256 _pid) public nonReentrant{
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         pool.lpToken.safeTransfer(address(msg.sender), user.amount);
