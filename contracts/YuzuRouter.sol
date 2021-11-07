@@ -32,7 +32,7 @@ contract SwapMiningMock {
 
 }
 
-contract ZooRouter is UniswapV2Router02 ,Ownable{
+contract YuzuRouter is UniswapV2Router02 ,Ownable{
 
     ISwapMining public swapMining;
 

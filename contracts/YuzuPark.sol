@@ -8,23 +8,23 @@ import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./ZooToken.sol";
-import "./HalfAttenuationZooReward.sol";
+import "./YuzuToken.sol";
+import "./HalfAttenuationYuzuReward.sol";
 
 
 
 
-interface IZooKeeper {
-  //Zookeeper is in charge of the zoo
-  //It control the speed of ZOO release by rules 
-  function requestForZOO(uint256 amount) external returns (uint256);
+interface IYuzuKeeper {
+  //Yuzukeeper is in charge of the Yuzu
+  //It control the speed of Yuzu release by rules 
+  function requestForYUZU(uint256 amount) external returns (uint256);
 }
 
 
-// ZooPark is interesting place where you can get more ZOO as long as you stake
+// YuzuPark is interesting place where you can get more Yuzu as long as you stake
 // Have fun reading it. Hopefully it's bug-free. God bless.
 
-contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
+contract YuzuPark is Ownable ,HalfAttenuationYuzuReward,ReentrancyGuard{
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
     // Info of each user.
@@ -35,10 +35,10 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
         // We do some fancy math here. Basically, any point in time, the amount of Zos
         // entitled to a user but is pending to be distributed is:
         //
-        //   pending reward = (user.amount * pool.accZooPerShare) - user.rewardDebt
+        //   pending reward = (user.amount * pool.accYuzuPerShare) - user.rewardDebt
         //
         // Whenever a user deposits or withdraws LP tokens to a pool. Here's what happens:
-        //   1. The pool's `accZooPerShare` (and `lastRewardBlock`) gets updated.
+        //   1. The pool's `accYuzuPerShare` (and `lastRewardBlock`) gets updated.
         //   2. User receives the pending reward sent to his/her address.
         //   3. User's `amount` gets updated.
         //   4. User's `rewardDebt` gets updated.
@@ -46,14 +46,14 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
     // Info of each pool.
     struct PoolInfo {
         IERC20 lpToken; // Address of LP token contract.
-        uint256 allocPoint; // How many allocation points assigned to this pool. ZOOs to distribute per block.
-        uint256 lastRewardBlock; // Last block number that ZOOs distribution occurs.
-        uint256 accZooPerShare; // Accumulated ZOOs per share, times 1e12. See below.
+        uint256 allocPoint; // How many allocation points assigned to this pool. YUZUs to distribute per block.
+        uint256 lastRewardBlock; // Last block number that YUZUs distribution occurs.
+        uint256 accYuzuPerShare; // Accumulated YUZUs per share, times 1e12. See below.
     }
-    // The ZOO TOKEN!
-    ZooToken public zoo;
-    // The ZOO Keeper
-    IZooKeeper public zookeeper;
+    // The Yuzu TOKEN!
+    YuzuToken public Yuzu;
+    // The Yuzu Keeper
+    IYuzuKeeper public yuzukeeper;
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
@@ -69,18 +69,18 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
     );
 
     constructor(
-        ZooToken _zoo,
-        IZooKeeper _zookeeper,
-        uint256 _zooPerBlock,
+        YuzuToken _yuzu,
+        IYuzuKeeper _yuzukeeper,
+        uint256 _yuzuPerBlock,
         uint256 _startBlock,
         uint256 _blockNumberOfHalfAttenuationCycle
-    ) public HalfAttenuationZooReward(_zooPerBlock,_startBlock,_blockNumberOfHalfAttenuationCycle){
-        require(address(_zoo) != address(0));
-        require(address(_zookeeper) != address(0));
+    ) public HalfAttenuationYuzuReward(_yuzuPerBlock,_startBlock,_blockNumberOfHalfAttenuationCycle){
+        require(address(_yuzu) != address(0));
+        require(address(_yuzukeeper) != address(0));
 
-        zoo = _zoo;
-        zookeeper = _zookeeper;
-        zooPerBlock = _zooPerBlock;
+        yuzu = _yuzu;
+        yuzukeeper = _yuzukeeper;
+        yuzuPerBlock = _yuzuPerBlock;
     }
 
     function poolLength() external view returns (uint256) {
@@ -105,12 +105,12 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
                 lpToken: _lpToken,
                 allocPoint: _allocPoint,
                 lastRewardBlock: lastRewardBlock,
-                accZooPerShare: 0
+                accYuzuPerShare: 0
             })
         );
     }
 
-    // Update the given pool's ZOO allocation point. Can only be called by the owner.
+    // Update the given pool's YUZU allocation point. Can only be called by the owner.
     function set(
         uint256 _pid,
         uint256 _allocPoint,
@@ -126,26 +126,26 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
     }
 
 
-    // View function to see pending ZOOs on frontend.
-    function pendingZoo(uint256 _pid, address _user)
+    // View function to see pending YUZUs on frontend.
+    function pendingYuzu(uint256 _pid, address _user)
         external
         view
         returns (uint256)
     {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
-        uint256 accZooPerShare = pool.accZooPerShare;
+        uint256 accYuzuPerShare = pool.accYuzuPerShare;
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-            uint256 zooReward =
-                getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
+            uint256 yuzuReward =
+                getYuzuBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
                     totalAllocPoint
                 );
-            accZooPerShare = accZooPerShare.add(
-                zooReward.mul(1e12).div(lpSupply)
+            accYuzuPerShare = accYuzuPerShare.add(
+                yuzuReward.mul(1e12).div(lpSupply)
             );
         }
-        return user.amount.mul(accZooPerShare).div(1e12).sub(user.rewardDebt);
+        return user.amount.mul(accYuzuPerShare).div(1e12).sub(user.rewardDebt);
     }
 
     // Update reward vairables for all pools. Be careful of gas spending!
@@ -167,29 +167,29 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
             pool.lastRewardBlock = block.number;
             return;
         }
-        uint256 zooReward = getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
+        uint256 yuzuReward = getYuzuBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
                 totalAllocPoint
             );
 
-        zooReward = zookeeper.requestForZOO(zooReward);
+        yuzuReward = yuzukeeper.requestForYUZU(yuzuReward);
 
-        pool.accZooPerShare = pool.accZooPerShare.add(
-            zooReward.mul(1e12).div(lpSupply)
+        pool.accYuzuPerShare = pool.accYuzuPerShare.add(
+            yuzuReward.mul(1e12).div(lpSupply)
         );
         pool.lastRewardBlock = block.number;
     }
 
-    // Deposit LP tokens to ZooPark for Zoo allocation.
+    // Deposit LP tokens to YuzuPark for Yuzu allocation.
     function deposit(uint256 _pid, uint256 _amount) public nonReentrant{
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
         if (user.amount > 0) {
             uint256 pending =
-                user.amount.mul(pool.accZooPerShare).div(1e12).sub(
+                user.amount.mul(pool.accYuzuPerShare).div(1e12).sub(
                     user.rewardDebt
                 );
-            safeZooTransfer(msg.sender, pending);
+            safeYuzuTransfer(msg.sender, pending);
         }
         pool.lpToken.safeTransferFrom(
             address(msg.sender),
@@ -197,7 +197,7 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
             _amount
         );
         user.amount = user.amount.add(_amount);
-        user.rewardDebt = user.amount.mul(pool.accZooPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accYuzuPerShare).div(1e12);
         emit Deposit(msg.sender, _pid, _amount);
     }
 
@@ -208,12 +208,12 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
         uint256 pending =
-            user.amount.mul(pool.accZooPerShare).div(1e12).sub(
+            user.amount.mul(pool.accYuzuPerShare).div(1e12).sub(
                 user.rewardDebt
             );
-        safeZooTransfer(msg.sender, pending);
+        safeYuzuTransfer(msg.sender, pending);
         user.amount = user.amount.sub(_amount);
-        user.rewardDebt = user.amount.mul(pool.accZooPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accYuzuPerShare).div(1e12);
         pool.lpToken.safeTransfer(address(msg.sender), _amount);
         emit Withdraw(msg.sender, _pid, _amount);
     }
@@ -228,13 +228,13 @@ contract ZooPark is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
         user.rewardDebt = 0;
     }
 
-    // Safe zoo transfer function, just in case if rounding error causes pool to not have enough ZOOs.
-    function safeZooTransfer(address _to, uint256 _amount) internal {
-        uint256 zooBal = zoo.balanceOf(address(this));
-        if (_amount > zooBal) {
-            zoo.transfer(_to, zooBal);
+    // Safe yuzu transfer function, just in case if rounding error causes pool to not have enough YUZUs.
+    function safeYuzuTransfer(address _to, uint256 _amount) internal {
+        uint256 yuzuBal = yuzu.balanceOf(address(this));
+        if (_amount > yuzuBal) {
+            yuzu.transfer(_to, yuzuBal);
         } else {
-            zoo.transfer(_to, _amount);
+            yuzu.transfer(_to, _amount);
         }
     }
 }
