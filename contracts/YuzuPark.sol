@@ -51,7 +51,7 @@ contract YuzuPark is Ownable ,HalfAttenuationYuzuReward,ReentrancyGuard{
         uint256 accYuzuPerShare; // Accumulated YUZUs per share, times 1e12. See below.
     }
     // The Yuzu TOKEN!
-    YuzuToken public Yuzu;
+    YuzuToken public yuzu;
     // The Yuzu Keeper
     IYuzuKeeper public yuzukeeper;
     // Info of each pool.
