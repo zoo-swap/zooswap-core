@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 
-// ZooToken
-contract ZooToken is ERC20("ZooToken", "ZOO"), Ownable {
+// YuzuToken
+contract YuzuToken is ERC20("YuzuToken", "Yuzu"), Ownable {
 
   uint256 constant TOTAL_SUPPLAY =  (5*10 ** 8) * (10 ** 18) ;  // 500 milli
 

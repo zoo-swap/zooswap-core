@@ -9,22 +9,22 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import './uniswapv2/libraries/UniswapV2Library.sol';
-import "./ZooToken.sol";
-import "./ZooRouter.sol";
-import "./HalfAttenuationZooReward.sol";
+import "./YuzuToken.sol";
+import "./YuzuRouter.sol";
+import "./HalfAttenuationYuzuReward.sol";
 
 
-interface IZooKeeper {
-  //Zookeeper is in charge of the zoo
-  //It control the speed of ZOO release by rules 
-  function requestForZOO(uint256 amount) external returns (uint256);
+interface IYuzuKeeper {
+  //Yuzukeeper is in charge of the yuzu
+  //It control the speed of YUZU release by rules 
+  function requestForYUZU(uint256 amount) external returns (uint256);
 }
 
 
-// ZooSwapMining is interesting place where you can get more ZOO as long as you stake
+// YuzuSwapMining is interesting place where you can get more YUZU as long as you stake
 // Have fun reading it. Hopefully it's bug-free. God bless.
 
-contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
+contract YuzuSwapMining is Ownable ,HalfAttenuationYuzuReward,ReentrancyGuard{
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
     // Info of each user.
@@ -35,10 +35,10 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
         // We do some fancy math here. Basically, any point in time, the amount of Zos
         // entitled to a user but is pending to be distributed is:
         //
-        //   pending reward = (user.amount * pool.accZooPerShare) - user.rewardDebt
+        //   pending reward = (user.amount * pool.accYuzuPerShare) - user.rewardDebt
         //
         // Whenever a user deposits or withdraws LP tokens to a pool. Here's what happens:
-        //   1. The pool's `accZooPerShare` (and `lastRewardBlock`) gets updated.
+        //   1. The pool's `accYuzuPerShare` (and `lastRewardBlock`) gets updated.
         //   2. User receives the pending reward sent to his/her address.
         //   3. User's `amount` gets updated.
         //   4. User's `rewardDebt` gets updated.
@@ -48,18 +48,18 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
         address lpToken; // Address of LP token contract.
         address archorTokenAddr; //the anchor token for swap weight
         uint256 lpTokenTotal;
-        uint256 allocPoint; // How many allocation points assigned to this pool. ZOOs to distribute per block.
-        uint256 lastRewardBlock; // Last block number that ZOOs distribution occurs.
-        uint256 accZooPerShare; // Accumulated ZOOs per share, times 1e12. See below.
+        uint256 allocPoint; // How many allocation points assigned to this pool. YUZUs to distribute per block.
+        uint256 lastRewardBlock; // Last block number that YUZUs distribution occurs.
+        uint256 accYuzuPerShare; // Accumulated YUZUs per share, times 1e12. See below.
     }
 
-    // The ZOO TOKEN!
-    ZooToken public zoo;
-    //The ZOORouter addr
+    // The YUZU TOKEN!
+    YuzuToken public yuzu;
+    //The YUZURouter addr
     address public routerAddr;
     address public factoryAddr;
-    // The ZOO Keeper
-    IZooKeeper public zookeeper;
+    // The YUZU Keeper
+    IYuzuKeeper public yuzukeeper;
   
     // Info of each pool.
     PoolInfo[] public poolInfo;
@@ -73,30 +73,30 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
 
 
 
-    event MinedBySwap(address indexed user, uint256 indexed pid, uint256 zooAmount);
-    event Withdraw(address indexed user, uint256 indexed pid, uint256 lpBurned,uint256 zooAmount);
+    event MinedBySwap(address indexed user, uint256 indexed pid, uint256 yuzuAmount);
+    event Withdraw(address indexed user, uint256 indexed pid, uint256 lpBurned,uint256 yuzuAmount);
 
     modifier onlyRouter() {
-        require(msg.sender == routerAddr, "ZooSwapMining: sender isn't the router");
+        require(msg.sender == routerAddr, "YuzuSwapMining: sender isn't the router");
         _;
     }
 
 
     constructor(
-        ZooToken _zoo,
-        IZooKeeper _zookeeper,
+        YuzuToken _yuzu,
+        IYuzuKeeper _yuzukeeper,
         address payable _routerAddr,
-        uint256 _zooPerBlock,
+        uint256 _yuzuPerBlock,
         uint256 _startBlock,
         uint256 _blockNumberOfHalfAttenuationCycle
-    ) public HalfAttenuationZooReward(_zooPerBlock,_startBlock,_blockNumberOfHalfAttenuationCycle) {
-        require(address(_zoo) != address(0));
-        require(address(_zookeeper) != address(0));
+    ) public HalfAttenuationYuzuReward(_yuzuPerBlock,_startBlock,_blockNumberOfHalfAttenuationCycle) {
+        require(address(_yuzu) != address(0));
+        require(address(_yuzukeeper) != address(0));
         require(_routerAddr != address(0));
-        zoo = _zoo;
-        zookeeper = _zookeeper;
+        yuzu = _yuzu;
+        yuzukeeper = _yuzukeeper;
         routerAddr = _routerAddr;
-        factoryAddr = ZooRouter(_routerAddr).factory();
+        factoryAddr = YuzuRouter(_routerAddr).factory();
     }
 
     function poolLength() external view returns (uint256) {
@@ -126,13 +126,13 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
                 lpTokenTotal : 0, 
                 allocPoint: _allocPoint,
                 lastRewardBlock: lastRewardBlock,
-                accZooPerShare: 0
+                accYuzuPerShare: 0
             })
         );
         tokenPairMapPoolPos[_lpToken] =  poolInfo.length;
     }
 
-    // Update the given pool's ZOO allocation point. Can only be called by the owner.
+    // Update the given pool's YUZU allocation point. Can only be called by the owner.
     function set(
         uint256 _pid,
         uint256 _allocPoint,
@@ -148,8 +148,8 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
     }
 
 
-    // View function to see pending ZOOs on frontend.
-    function pendingZooAll(address _user)
+    // View function to see pending YUZUs on frontend.
+    function pendingYuzuAll(address _user)
         external
         view
         returns (uint256)
@@ -159,44 +159,44 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
         for (uint256 _pid = 0; _pid < length; ++_pid) {
             PoolInfo storage pool = poolInfo[_pid];
             UserInfo storage user = userInfo[_pid][_user];
-            uint256 accZooPerShare = pool.accZooPerShare;
+            uint256 accYuzuPerShare = pool.accYuzuPerShare;
             uint256 lpSupply = pool.lpTokenTotal;
             if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-                uint256 zooReward =
-                     getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
+                uint256 yuzuReward =
+                     getYuzuBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
                         totalAllocPoint
                     );
-                accZooPerShare = accZooPerShare.add(
-                    zooReward.mul(1e12).div(lpSupply)
+                accYuzuPerShare = accYuzuPerShare.add(
+                    yuzuReward.mul(1e12).div(lpSupply)
                 );
             }
-            total = user.amount.mul(accZooPerShare).div(1e12).sub(user.rewardDebt).add(total);
+            total = user.amount.mul(accYuzuPerShare).div(1e12).sub(user.rewardDebt).add(total);
         }
         return total;
     }
 
 
 
-    // View function to see pending ZOOs on frontend.
-    function pendingZoo(uint256 _pid, address _user)
+    // View function to see pending YUZUs on frontend.
+    function pendingYuzu(uint256 _pid, address _user)
         external
         view
         returns (uint256)
     {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
-        uint256 accZooPerShare = pool.accZooPerShare;
+        uint256 accYuzuPerShare = pool.accYuzuPerShare;
         uint256 lpSupply = pool.lpTokenTotal;
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-            uint256 zooReward =
-                getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
+            uint256 yuzuReward =
+                getYuzuBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
                     totalAllocPoint
                 );
-            accZooPerShare = accZooPerShare.add(
-                zooReward.mul(1e12).div(lpSupply)
+            accYuzuPerShare = accYuzuPerShare.add(
+                yuzuReward.mul(1e12).div(lpSupply)
             );
         }
-        return user.amount.mul(accZooPerShare).div(1e12).sub(user.rewardDebt);
+        return user.amount.mul(accYuzuPerShare).div(1e12).sub(user.rewardDebt);
     }
 
     // Update reward vairables for all pools. Be careful of gas spending!
@@ -218,15 +218,15 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
             pool.lastRewardBlock = block.number;
             return;
         }
-        uint256 zooReward =
-            getZooBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
+        uint256 yuzuReward =
+            getYuzuBetweenBlocks(pool.lastRewardBlock, block.number).mul(pool.allocPoint).div(
             totalAllocPoint);
 
-        zooReward = zookeeper.requestForZOO(zooReward);
+        yuzuReward = yuzukeeper.requestForYUZU(yuzuReward);
 
 
-        pool.accZooPerShare = pool.accZooPerShare.add(
-            zooReward.mul(1e12).div(lpSupply)
+        pool.accYuzuPerShare = pool.accYuzuPerShare.add(
+            yuzuReward.mul(1e12).div(lpSupply)
         );
         pool.lastRewardBlock = block.number;
     }
@@ -263,20 +263,20 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
 
         pool.lpTokenTotal = pool.lpTokenTotal.add(_amount);
         user.amount = user.amount.add(_amount);
-        user.rewardDebt = user.rewardDebt.add(_amount.mul(pool.accZooPerShare).div(1e12));
+        user.rewardDebt = user.rewardDebt.add(_amount.mul(pool.accYuzuPerShare).div(1e12));
 
         emit MinedBySwap(account, _pid, _amount);
         return true;
     }
 
 
-    // Safe zoo transfer function, just in case if rounding error causes pool to not have enough ZOOs.
-    function safeZooTransfer(address _to, uint256 _amount) internal {
-        uint256 zooBal = zoo.balanceOf(address(this));
-        if (_amount > zooBal) {
-            zoo.transfer(_to, zooBal);
+    // Safe yuzu transfer function, just in case if rounding error causes pool to not have enough YUZUs.
+    function safeYuzuTransfer(address _to, uint256 _amount) internal {
+        uint256 yuzuBal = yuzu.balanceOf(address(this));
+        if (_amount > yuzuBal) {
+            yuzu.transfer(_to, yuzuBal);
         } else {
-            zoo.transfer(_to, _amount);
+            yuzu.transfer(_to, _amount);
         }
     }
 
@@ -287,15 +287,15 @@ contract ZooSwapMining is Ownable ,HalfAttenuationZooReward,ReentrancyGuard{
 
         updatePool(_pid);
         uint256 pending =
-            user.amount.mul(pool.accZooPerShare).div(1e12).sub(
+            user.amount.mul(pool.accYuzuPerShare).div(1e12).sub(
                 user.rewardDebt
             );
-        safeZooTransfer(msg.sender, pending);
+        safeYuzuTransfer(msg.sender, pending);
         //burn all lp
         pool.lpTokenTotal = pool.lpTokenTotal.sub(_burned);
         user.amount = user.amount.sub(_burned);
 
-        user.rewardDebt = user.amount.mul(pool.accZooPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accYuzuPerShare).div(1e12);
         emit Withdraw(msg.sender, _pid,_burned, pending);
     }
 
